@@ -1,32 +1,61 @@
-# Load the employee_attrition_data.csv file and visualize the data. Make a historgram of each attribute
-
+# Load the data set employees_aatrition_dataset_10000.csv into a pandas dataframe
 import pandas as pd
 import matplotlib.pyplot as plt
+import seaborn as sns
+import numpy as np
+import os
+import warnings
+warnings.filterwarnings("ignore")
 
-# Load the data and one hot encode the categorical variables
+# Set the style of seaborn
+sns.set(style="whitegrid")
+
+# Load the data set
 data = pd.read_csv('employee_attrition_dataset_10000.csv')
-# One hot encode the categorical variables to convert them into numerical format
-data = pd.get_dummies(data)
 
-# Print the header of the data frame to verify the one hot encoding
+# One hot encode the categorical variables
+categorical_cols = data.select_dtypes(include=['object']).columns
+for col in categorical_cols:
+    if col != 'Attrition':
+        dummies = pd.get_dummies(data[col], prefix=col)
+        data = pd.concat([data, dummies], axis=1)
+        data.drop(col, axis=1, inplace=True)
+# Convert the target variable to a binary variable
+data['Attrition'] = data['Attrition'].map({'Yes': 1, 'No': 0})
+# Convert the data types of the columns to float
+data = data.astype(float)
+
+# save the data set to a csv file
+data.to_csv('employee_attrition_dataset_10000_processed.csv', index=False)
+
+# Print the first 5 rows of the data set
 print(data.head())
+# Print the shape of the data set
+print(data.shape)
 
-# Create a histogram of each attribute
-data.hist()
-plt.show()
 
-# Create a histogram of each attribute with a density plot
-data.plot(kind='density', subplots=True, layout=(4,4), sharex=False)
-plt.show()
+# Make a correlation matrix and print save it to a file
+def plot_correlation_matrix(data):
+    # Calculate the correlation matrix
+    corr = data.corr()
+    # Set up the matplotlib figure
+    plt.figure(figsize=(12, 10))
+    # Draw the heatmap without annotations
+    sns.heatmap(corr, cmap='coolwarm', annot=False, square=True, cbar_kws={"shrink": .8})
+    plt.title('Correlation Matrix')
+    plt.savefig('correlation_matrix.png')
+    plt.show()
+# Plot the correlation matrix
+plot_correlation_matrix(data)
 
-# Create a box plot of each attribute
-data.plot(kind='box', subplots=True, layout=(4,4), sharex=False, sharey=False)
-plt.show()
-
-# Create a correlation matrix
-correlations = data.corr()
-fig = plt.figure()
-ax = fig.add_subplot(111)
-cax = ax.matshow(correlations, vmin=-1, vmax=1)
-fig.colorbar(cax)
-plt.show()
+# Plot the distribution of the target variable
+def plot_target_distribution(data):
+    plt.figure(figsize=(8, 6))
+    sns.countplot(x='Attrition', data=data, palette='Set2')
+    plt.title('Distribution of Attrition')
+    plt.xlabel('Attrition')
+    plt.ylabel('Count')
+    plt.savefig('target_distribution.png')
+    plt.show()
+# Plot the target distribution
+plot_target_distribution(data)
