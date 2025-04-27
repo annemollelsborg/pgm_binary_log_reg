@@ -8,7 +8,7 @@ from pyro.optim import Adam
 from pyro.contrib.autoguide import AutoNormal
 
 # Load dataset
-df = pd.read_csv("/Users/annemoll/Desktop/train_processed.csv")
+df = pd.read_csv("/Data/train_processed.csv")
 
 # Keep only numeric columns
 df_numeric = df.select_dtypes(include=[np.number])
@@ -73,10 +73,10 @@ plt.title('ELBO vs Latent Dimensionality')
 plt.grid(True)
 plt.show()
 
-print(f"✅ Best latent dimension selected: {best_latent_dim}")
+print(f"Best latent dimension selected: {best_latent_dim}")
 
 # Save reduced dataset
 reduced_df = pd.DataFrame(best_z_loc, columns=[f"z{i+1}" for i in range(best_latent_dim)])
-reduced_df.to_csv("/Users/annemoll/Desktop/reduced_dataset.csv", index=False)
+reduced_df.to_csv("/Data/reduced_dataset.csv", index=False)
 
-print("✅ Reduced dataset saved to /Users/annemoll/Desktop/reduced_dataset.csv")
+print("Reduced dataset saved")
