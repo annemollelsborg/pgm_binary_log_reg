@@ -3,12 +3,11 @@ import numpy as np
 import torch
 import pyro
 import pyro.distributions as dist
-from pyro.infer import SVI, Trace_ELBO
-from pyro.optim import Adam
-from pyro.contrib.autoguide import AutoNormal
+from pyro.infer import SVI, Trace_ELBO, Predictive
+from pyro.optim import ClippedAdam
+from pyro.infer.autoguide import AutoNormal, AutoMultivariateNormal, AutoLowRankMultivariateNormal
 import matplotlib.pyplot as plt
-
-np.random.seed(42)
+from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
 
 # Load dataset
 df = pd.read_csv("data/train_processed.csv")
@@ -38,65 +37,58 @@ X = (X_np - X_mean) / X_std
 X = np.nan_to_num(X, nan=0.0, posinf=0.0, neginf=0.0)
 X = torch.tensor(X, dtype=torch.float32)
 
-# Set latent dimension
-latent_dim = 2
+# For demonstration, let's split data into train and test sets
+# Assuming target is binary and torch tensor
+y = torch.tensor(target.values, dtype=torch.int64)
+n_samples = X.shape[0]
+train_size = int(0.8 * n_samples)
+indices = torch.randperm(n_samples)
+train_idx, test_idx = indices[:train_size], indices[train_size:]
+X_train, X_test = X[train_idx], X[test_idx]
+y_train, y_test = y[train_idx], y[test_idx]
 
-# Define PPCA model
-def ppca_model(X, latent_dim):
-    N, D = X.shape
-    W = pyro.sample("W", dist.Normal(0, 1).expand([D, latent_dim]).to_event(2))
-    sigma  = pyro.sample("sigma",  dist.HalfCauchy(1)) 
-    
-    with pyro.plate("data", N):
-        z = pyro.sample("z", dist.Normal(0, 1).expand([latent_dim]).to_event(1))
-        loc = torch.matmul(z, W.T)
-        pyro.sample("obs", dist.Normal(loc, sigma).to_event(1), obs=X)
+# Define Bayesian logistic regression model
+def model(X, n_cat=None, y=None):
+    D = X.shape[1]
+    beta = pyro.sample("beta", dist.Normal(torch.zeros(D), torch.ones(D)).to_event(1))
+    logits = X @ beta
+    with pyro.plate("data", X.shape[0]):
+        pyro.sample("obs", dist.Bernoulli(logits=logits), obs=y)
 
-# Search for best latent dimension
-best_latent_dim = None
-best_elbo = float('-inf')
-best_z_loc = None
+n_steps = 5000
 
-elbos = []
-dims = list(range(1, 11))  # Dimensions from 1 to 10
+guides = {
+    "AutoNormal": AutoNormal,
+    "AutoMultivariateNormal": AutoMultivariateNormal,
+    "AutoLowRankMultivariateNormal": lambda model: AutoLowRankMultivariateNormal(model, rank=2)
+}
 
-for latent_dim in dims:
+for name, GuideClass in guides.items():
+    print(f"\nRunning inference with {name}")
     pyro.clear_param_store()
-    
-    def model_wrapped(X):
-        return ppca_model(X, latent_dim)
+    guide = GuideClass(model)
+    optimizer = ClippedAdam({"lr": 0.001})
+    elbo = Trace_ELBO()
+    svi = SVI(model, guide, optimizer, loss=elbo)
 
-    guide = AutoNormal(model_wrapped)
-    optimizer = Adam({"lr": 0.01})
-    svi = SVI(model_wrapped, guide, optimizer, loss=Trace_ELBO())
-    
-    num_steps = 1000
-    final_loss = None
-    for step in range(num_steps):
-        loss = svi.step(X)
-        final_loss = loss
+    for step in range(n_steps):
+        loss = svi.step(X_train, n_cat=None, y=y_train.float())
+        if step % 1000 == 0:
+            print(f"[{name} | Step {step}] ELBO: {loss:.2f}")
 
-    elbo = -final_loss
-    elbos.append(elbo)
+    predictive = Predictive(model, guide=guide, num_samples=1000, return_sites=("beta",))
+    samples = predictive(X_test, n_cat=None, y=None)
+    beta_samples = samples["beta"].detach().squeeze()
+    beta_mean = beta_samples.mean(0)
+    logits_test = X_test @ beta_mean
+    probs_test = torch.sigmoid(logits_test)
+    y_pred = (probs_test > 0.5).int()
 
-    if elbo > best_elbo:
-        best_elbo = elbo
-        best_latent_dim = latent_dim
-        best_z_loc = guide(X)["z"].detach().numpy()
+    accuracy = (y_pred == y_test.int()).float().mean()
+    print(f"{name} Test Accuracy: {accuracy:.3f}")
 
-# Plot ELBO vs latent dimensions
-plt.plot(dims, elbos, marker='o')
-plt.xlabel('Latent Dimensions')
-plt.ylabel('ELBO')
-plt.title('ELBO vs Latent Dimensionality')
-plt.grid(True)
-plt.show()
-
-print(f"Best latent dimension selected: {best_latent_dim}")
-
-# Save reduced dataset and merge with target
-reduced_df = pd.DataFrame(best_z_loc, columns=[f"z{i+1}" for i in range(best_latent_dim)])
-reduced_df["Attrition"] = target.values
-reduced_df.to_csv("data/reduced_dataset.csv", index=False)
-
-print("Reduced dataset saved")
+    cm = confusion_matrix(y_test.numpy(), y_pred.numpy())
+    disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=["No Attrition", "Attrition"])
+    disp.plot(cmap='Blues')
+    plt.title(f"Confusion Matrix ({name})")
+    plt.show()
