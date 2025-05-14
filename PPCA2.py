@@ -1,14 +1,16 @@
+#@@ -6,64 +6,83 @@ 
+import pyro
 import pyro.distributions as dist
-import pandas as pd
 from pyro.infer import SVI, Trace_ELBO
 from pyro.optim import Adam
 from pyro.contrib.autoguide import AutoNormal
 import matplotlib.pyplot as plt
+import pandas as pd
 import numpy as np
 import torch
-import pyro
+
 # Load dataset
-df = pd.read_csv("/Data/train_processed.csv")
+df = pd.read_csv("data/train_processed.csv")
 
 # Keep only numeric columns
 df_numeric = df.select_dtypes(include=[np.number])
@@ -112,7 +114,9 @@ for latent_dim in dims:
 # Plot ELBO vs latent dimensions
 plt.plot(dims, elbos, marker='o')
 
-#-75,8 +94,9 @@ plt.show()
+#@@ -75,8 +94,9 @@
+
+plt.show()
 
 print(f"Best latent dimension selected: {best_latent_dim}")
 
