@@ -16,6 +16,7 @@ from pyro.infer.autoguide import AutoMultivariateNormal
 from pyro.infer.autoguide import AutoNormal
 from pyro.infer import Predictive
 from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
+from pyro.infer import Predictive
 
 palette = itertools.cycle(sns.color_palette())
 
@@ -25,6 +26,8 @@ reduced_data = pd.read_csv('data/reduced_dataset.csv')
 
 X = reduced_data.iloc[:, :4].values
 y = reduced_data.iloc[:, 4].astype(int).values
+print("Unique values in y (before training):", np.unique(y))
+print("Any non-binary y values?", np.any((y != 0) & (y != 1)))
 ind = y.copy()
 
 print("X shape:", X.shape)
@@ -43,7 +46,9 @@ y_test = y[ix_test]
 print("num train: %d" % len(y_train))
 print("num test: %d" % len(y_test))
 
+epsilon = 1e-6
 p = y_train.mean().item()
+p = np.clip(p, epsilon, 1 - epsilon)
 log_odds = np.log(p / (1 - p))
 
 # Model definition
@@ -63,8 +68,6 @@ X_train = torch.tensor(X_train).float()
 y_train = torch.tensor(y_train).float()
 X_test = torch.tensor(X_test).float()
 y_test = torch.tensor(y_test).float()
-
-from pyro.infer import Predictive
 
 prior_pred = Predictive(model, num_samples=1000)
 prior_samples = prior_pred(X_test, n_cat=None, y=None)

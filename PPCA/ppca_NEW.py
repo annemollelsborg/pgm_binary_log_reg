@@ -75,7 +75,6 @@ for latent_dim in dims:
     for step in range(num_steps):
         loss = svi.step(X)
         final_loss = loss
-
     elbo = -final_loss
     elbos.append(elbo)
 
