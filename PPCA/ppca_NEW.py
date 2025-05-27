@@ -11,7 +11,7 @@ import matplotlib.pyplot as plt
 np.random.seed(42)
 
 # Load dataset
-df = pd.read_csv("data/train_processed.csv")
+df = pd.read_csv("data/data_processed.csv")
 df = df.drop(columns=[
     "MonthlyIncome",
     "TotalWorkingYears",
